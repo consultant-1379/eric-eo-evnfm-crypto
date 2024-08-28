@@ -1,0 +1,12 @@
+{
+  "keystoreType": "KMS",
+  "keystorePasswordAlias": "09657981-8771-4ab0-897a-729ac50b01c1",
+  "encryptionAlgorithm": "AES",
+  "transformation": "AES/CBC/PKCS5Padding",
+  "digestAlgorithm": "SHA-256",
+  "secureRandomAlgorithm": "SHA1PRNG",
+  "cipherKeyIdLength": 16,
+  "cipherKeyLength": 128,
+  "ivLength": 16,
+  "latestEncryptionDecryptionVersion": 1
+}

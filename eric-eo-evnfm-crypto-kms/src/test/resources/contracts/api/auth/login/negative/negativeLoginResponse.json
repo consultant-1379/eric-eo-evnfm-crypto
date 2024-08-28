@@ -1,0 +1,35 @@
+{
+    "request_id": "5a224467-20d4-a890-3cd6-d0e0bb776ccd",
+    "lease_id": "",
+    "renewable": false,
+    "lease_duration": 0,
+    "data": null,
+    "wrap_info": null,
+    "warnings": null,
+    "auth": {
+        "client_token": "notValidToken",
+        "accessor": "TfZpo7DKdGvUihBM38FHhSkH",
+        "policies": [
+            "default",
+            "secret-management"
+        ],
+        "token_policies": [
+            "default",
+            "secret-management"
+        ],
+        "metadata": {
+            "role": "secret-crypto-role",
+            "service_account_name": "crypto-sa",
+            "service_account_namespace": "test-ns",
+            "service_account_secret_name": "",
+            "service_account_uid": "e4563635-6d98-40e5-8d1d-6926db277427"
+        },
+        "lease_duration": 86400,
+        "renewable": true,
+        "entity_id": "cbae28ef-1421-ac73-d106-1c4f3d61c557",
+        "token_type": "service",
+        "orphan": true,
+        "mfa_requirement": null,
+        "num_uses": 0
+    }
+}

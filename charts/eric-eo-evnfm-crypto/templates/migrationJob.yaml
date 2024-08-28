@@ -1,0 +1,167 @@
+#
+# COPYRIGHT Ericsson 2024
+#
+#
+#
+# The copyright to the computer program(s) herein is the property of
+#
+# Ericsson Inc. The programs may be used and/or copied only with written
+#
+# permission from Ericsson Inc. or in accordance with the terms and
+#
+# conditions stipulated in the agreement/contract under which the
+#
+# program(s) have been supplied.
+#
+
+{{/*
+Job descriptor
+*/}}
+{{- $keystorePvc := print "keystore-pvc-" ( include "eric-eo-evnfm-crypto.name" . ) "-stateful-set-0" -}}
+{{- $persistentVolume := (lookup "v1" "PersistentVolumeClaim" .Release.Namespace $keystorePvc) -}}
+{{- if $persistentVolume }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ template "eric-eo-evnfm-crypto.name" . }}-migrate-keys-hook
+  labels: {{- include "eric-eo-evnfm-crypto.labels.extended-defaults" . | nindent 4 }}
+  annotations:
+    {{- include "eric-eo-evnfm-crypto.annotations" . | nindent 4 }}
+    "helm.sh/hook": post-upgrade
+    "helm.sh/hook-weight": "5"
+    "helm.sh/hook-delete-policy": hook-succeeded
+spec:
+  backoffLimit: 2
+  template:
+    metadata:
+      labels: {{- include "eric-eo-evnfm-crypto.labels.extended-defaults" . | nindent 8 }}
+      annotations: {{- include "eric-eo-evnfm-crypto.annotations" . | nindent 8 }}
+    spec:
+      restartPolicy: Never
+{{- if include "eric-eo-evnfm-crypto.pullSecrets" . }}
+      imagePullSecrets:
+        - name: {{ template "eric-eo-evnfm-crypto.pullSecrets" . }}
+{{- end }}
+      serviceAccountName: {{ template "eric-eo-evnfm-crypto.serviceAccount.name" . }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds.cryptoService | int }}
+      securityContext:
+        fsGroup: 144294
+      {{- if or .Values.tolerations (and .Values.global .Values.global.tolerations) }}
+      tolerations: {{ include "eric-eo-evnfm-crypto.tolerations" . | indent 8 }}
+      {{- end }}
+      containers:
+        - name: {{ .Chart.Name }}
+          image: {{ template "eric-eo-evnfm-crypto.migrationImagePath" . }}
+          imagePullPolicy: {{ template "eric-eo-evnfm-crypto.imagePullPolicy" . }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.container.ports.http }}
+              protocol: TCP
+          env:
+            - name: TZ
+              value: {{ .Values.global.timezone }}
+            - name: SERVICE_ID
+              value: "eric-eo-evnfm-crypto"
+            - name: "SPRING_PROFILES_ACTIVE"
+              value: "prod"
+            - name: "KUBERNETES_MASTER"
+              value: {{ .Values.kubernetes.master }}
+            - name: "retry.maxAttempts"
+              value: {{ .Values.retry.maxAttempts | quote }}
+            - name: "retry.backoff"
+              value: {{ .Values.retry.backoff | quote }}
+            - name: "spring.codec.maxInMemorySize"
+              value: {{ .Values.maxInMemorySize }}
+            - name: "KEYSTORE_LOCATION"
+              value: {{ .Values.persistence.keystore.persistentVolumeClaim.mountPath }}
+            - name: "KEYSTORE_PASSWORD_LOCATION"
+              value: {{ .Values.persistence.secure.persistentVolumeClaim.mountPath }}
+            - name: STORAGE_CONNECTIVITY
+              value: {{ .Values.persistence.secure.persistentVolumeClaim.storageConnectivity | quote }}
+            - name: KEYS_MIGRATION_ENABLED
+              value: "true"
+          securityContext:
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - all
+            allowPrivilegeEscalation: false
+            privileged: false
+            runAsNonRoot: true
+            runAsUser: 144294
+            runAsGroup: 144294
+          volumeMounts:
+            - name: keystore-pvc
+              mountPath: {{ .Values.persistence.keystore.persistentVolumeClaim.mountPath }}
+            - name: secure-pvc
+              mountPath: {{ .Values.persistence.secure.persistentVolumeClaim.mountPath }}
+            - name: tmp-data
+              mountPath: /tmp
+              readOnly: false
+            - mountPath: /run/secrets/kms-ca-cert
+              name: kms-ca-cert
+              readOnly: false
+            - mountPath: /var/lib/ca-certificates
+              name: ca-data
+              readOnly: false
+          resources:
+            requests:
+              cpu: {{ .Values.resources.cryptoService.requests.cpu | quote }}
+              memory: {{ .Values.resources.cryptoService.requests.memory | quote }}
+              ephemeral-storage: {{ index .Values.resources.cryptoService.requests "ephemeral-storage" | quote }}
+            limits:
+              cpu: {{ .Values.resources.cryptoService.limits.cpu | quote }}
+              memory: {{ .Values.resources.cryptoService.limits.memory | quote }}
+              ephemeral-storage: {{ index .Values.resources.cryptoService.limits "ephemeral-storage" | quote }}
+      initContainers:
+        - command:
+            - /bin/sh
+            - -c
+            - cp -R $SOURCE/* $TARGET/
+          env:
+            - name: SOURCE
+              value: /var/lib/ca-certificates
+            - name: TARGET
+              value: /ca
+          image: {{ template "eric-eo-evnfm-crypto.migrationImagePath" . }}
+          imagePullPolicy: IfNotPresent
+          name: ca-setup
+          resources:
+            requests:
+              cpu: {{ .Values.resources.caSetup.requests.cpu | quote }}
+              memory: {{ .Values.resources.caSetup.requests.memory | quote }}
+              ephemeral-storage: {{ index .Values.resources.caSetup.requests "ephemeral-storage" | quote }}
+            limits:
+              cpu: {{ .Values.resources.caSetup.limits.cpu | quote }}
+              memory: {{ .Values.resources.caSetup.limits.memory | quote }}
+              ephemeral-storage: {{ index .Values.resources.caSetup.limits "ephemeral-storage" | quote }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - all
+            privileged: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 144294
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          volumeMounts:
+            - mountPath: /ca
+              name: ca-data      
+      volumes:
+        - name: keystore-pvc
+          persistentVolumeClaim:
+            claimName: keystore-pvc-{{ template "eric-eo-evnfm-crypto.name" . }}-stateful-set-0
+        - name: secure-pvc
+          persistentVolumeClaim:
+            claimName: secure-pvc-{{ template "eric-eo-evnfm-crypto.name" . }}-stateful-set-0
+        - emptyDir: { }
+          name: tmp-data
+        - name: kms-ca-cert
+          secret:
+            optional: true
+            secretName: {{ template "eric-eo-evnfm-crypto.trustedInternalRootCa" . }}
+        - name: ca-data
+          emptyDir: { }
+{{- end }}

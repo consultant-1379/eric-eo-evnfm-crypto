@@ -1,0 +1,122 @@
+#
+# COPYRIGHT Ericsson 2024
+#
+#
+#
+# The copyright to the computer program(s) herein is the property of
+#
+# Ericsson Inc. The programs may be used and/or copied only with written
+#
+# permission from Ericsson Inc. or in accordance with the terms and
+#
+# conditions stipulated in the agreement/contract under which the
+#
+# program(s) have been supplied.
+#
+
+spring:
+  lifecycle:
+    timeout-per-shutdown-phase: "10s"
+  main.banner-mode: "off"
+  application:
+    name: eric-eo-evnfm-crypto
+  sleuth:
+    propagation-keys: "Authorization"
+  cloud:
+    vault:
+      authentication: KUBERNETES
+      kubernetes:
+        role: secret-manager_eric-eo-evnfm-crypto-sa
+      host: eric-sec-key-management
+      kv:
+        enabled: true
+
+logging:
+  #level:
+  #    root: DEBUG
+  config: "classpath:logback/logback-${LOG_STREAMINGMETHOD:indirect}.xml"
+  endpoints:
+    exclude: /, /generic/v1/encryption, /generic/v1/decryption, /actuator/prometheus, /actuator/health
+
+kms:
+  enabled: true
+server:
+  shutdown: graceful
+  port: 8888
+  socket: localhost
+
+management:
+  health:
+    livenessState:
+      enabled: true
+    readinessState:
+      enabled: true
+  endpoints:
+    web:
+      exposure:
+        include: "*"
+        exclude: "heapdump,threaddump,env"
+  endpoint:
+    env:
+      enabled: false
+    heapdump:
+      enabled: false
+    threaddump:
+      enabled: false
+    health:
+      show-details: "ALWAYS"
+      diskspace:
+        enabled: true
+        path: /tmp
+        threshold: 100MB
+      probes:
+        enabled: true
+      group:
+        readiness:
+          include: ping, diskSpace, pvcCheck, vault
+        liveness:
+          include: ping, diskSpace
+    prometheus:
+      enabled: true
+    metrics:
+      enabled: true
+    refresh:
+      enabled: true
+    shutdown:
+      enabled: true
+  metrics:
+    distribution:
+      sla:
+        http:
+          server:
+            requests: 100ms,300ms,500ms
+    export:
+      prometheus:
+        enabled: true
+  tracing:
+    propagation:
+      consume: [b3, w3c]
+      produce: [b3, w3c]
+
+healthCheckEnv:
+  mountPaths:
+    readOnly: /var/run/secrets/kubernetes.io/serviceaccount
+    readWrite: /var/lib/ca-certificates, /tmp
+
+#Build Info
+info:
+  app:
+#    name: @project.name@
+#    version: @project.version@
+    description: An application to encrypt and decrypt
+
+springfox:
+  documentation:
+    swagger:
+      v2:
+        path: /vnfm/docs
+
+stubrunner:
+  stubs-mode: classpath
+  ids:
+    - com.ericsson.orchestration.mgmt:eric-eo-evnfm-crypto-kms:+:stubs:8200

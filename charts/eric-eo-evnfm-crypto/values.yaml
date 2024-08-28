@@ -1,0 +1,225 @@
+#
+# COPYRIGHT Ericsson 2024
+#
+#
+#
+# The copyright to the computer program(s) herein is the property of
+#
+# Ericsson Inc. The programs may be used and/or copied only with written
+#
+# permission from Ericsson Inc. or in accordance with the terms and
+#
+# conditions stipulated in the agreement/contract under which the
+#
+# program(s) have been supplied.
+#
+
+productinfo:
+  rstate: RSTATE
+
+replicaCount: 2
+
+nameOverride: "eric-eo-evnfm-crypto"
+
+podDisruptionBudget:
+  minAvailable: 0
+
+updateStrategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxUnavailable: 1
+    maxSurge: 0
+
+# DR-D1121-011 supported global parameters shall be left as comments (YAML comment) in the values.yaml
+#global:
+#  registry:
+#    url: armdocker.rnd.ericsson.se
+#    imagePullPolicy: IfNotPresent
+#  timezone: UTC
+#  hosts:
+#    vnfm: vnfm.ericsson.example.com
+#  nodeSelector: {}
+#  labels: {}
+#  annotations: {}
+#  security:
+## internalIPFamily: IPv6 or IPv4
+#    privilegedPolicyClusterRoleName: RELEASE-NAME-allowed-use-privileged-policy
+#  securityPolicy:
+#    rolekind: ClusterRole # { choice='Role, ClusterRole, ""'' } [ default="" ]
+
+imageCredentials:
+  cryptoService:
+    repoPath: # see default value in eric-product-info.yaml file
+
+container:
+  ports:
+    http: 8888
+
+service:
+  type: ClusterIP
+  port: 80
+
+# DR-D1126-005
+resources:
+  cryptoService:
+    requests:
+      memory: "250Mi"
+      cpu: "200m"
+      ephemeral-storage: "300Mi"
+    limits:
+      memory: "1024Mi"
+      cpu: "800m"
+      ephemeral-storage: "500Mi"
+  caSetup:
+    requests:
+      memory: "128Mi"
+      cpu: "100m"
+      ephemeral-storage: "300Mi"
+    limits:
+      memory: "128Mi"
+      cpu: "100m"
+      ephemeral-storage: "500Mi"
+  kmsSetup:
+    requests:
+      memory: "128Mi"
+      cpu: "100m"
+      ephemeral-storage: "300Mi"
+    limits:
+      memory: "128Mi"
+      cpu: "100m"
+      ephemeral-storage: "500Mi"
+
+prometheus:
+  path: "/actuator/prometheus"
+  scrape: "true"
+  scrape-role: "endpoints"
+  scrape-interval: "15s"
+
+ingress:
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/proxy-body-size: "40G"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "1800"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "1800"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "1800"
+  enabled: true
+  hostname: foo.bar.com # to pass DR-HC-181
+  tls:
+    enabled: true
+    secretname: vnfm-tls-secret
+    passthrough: false # to pass DR-HC-181
+
+kubernetes:
+  master: https://kubernetes.default
+
+retry:
+  maxAttempts: "5"
+  backoff: "1000"
+
+maxInMemorySize: 10MB
+
+logging:
+  logstash:
+    host: eric-log-transformer
+    port: 5025
+
+podPriority:
+  cryptoService:
+    priorityClassName: ""
+
+probes:
+  cryptoService:
+    livenessProbe:
+      initialDelaySeconds: 200
+      timeoutSeconds: 5
+      periodSeconds: 30
+      failureThreshold: 3
+    readinessProbe:
+      initialDelaySeconds: 20
+      timeoutSeconds: 5
+      periodSeconds: 10
+      failureThreshold: 15
+
+# DR1120-061 Tolerations to influence scheduling decisions made by Kubernetes scheduler
+tolerations:
+  cryptoService:
+    - key: node.kubernetes.io/not-ready
+      operator: Exists
+      effect: NoExecute
+      tolerationSeconds: 300
+    - key: node.kubernetes.io/unreachable
+      operator: Exists
+      effect: NoExecute
+      tolerationSeconds: 300
+
+terminationGracePeriodSeconds:
+  cryptoService: 30
+
+nodeSelector: {}
+labels: {}
+annotations: {}
+
+affinity:
+  podAntiAffinity: "hard"
+  topologyKey: "kubernetes.io/hostname"
+
+kms:
+  enabled: true
+  credentials:
+    policyName: "secret-management"
+    storagePathV2: "secret-v2/data/*"
+    storagePathV1: "secret/*"
+    rolePrefix: "secret-manager"
+  tokenPath: /var/run/secrets/kubernetes.io/serviceaccount
+  tokenName: kms-token
+
+highAvailability:
+  debug: false
+  serviceMesh:
+    routes:
+      post:
+        retries:
+          maxAttempts: 3
+        timeout: 180s # Default: disabled
+    trafficPolicy:
+      outlierDetection:
+        splitExternalLocalOriginErrors: true # Default: false Local: failure to connect, timeout while connecting. External: 5xx return
+        consecutiveLocalOriginFailures: 2 # Default: 5
+        consecutive5xxErrors: 2 # Default: 5
+        interval: 5s # Default: 10s
+        baseEjectionTime: 1m # Default 30s
+
+persistence:
+  keystore:
+    persistentVolumeClaim:
+      accessMode: ReadWriteOnce
+      size: 64Mi
+      mountPath: "/keystore"
+      storageConnectivity: networked
+  secure:
+    persistentVolumeClaim:
+      accessMode: ReadWriteOnce
+      size: 64Mi
+      mountPath: "/secure"
+      storageConnectivity: networked
+
+# DR D1123-127
+appArmorProfile:
+  # The setting applies to all container when the container name is omitted.
+  # { choice='unconfined, runtime/default, localhost, "" ' } [ default="" ]
+  type: ""
+
+# DR D1123-128
+seccompProfile:
+  # The setting applies to all container when the container name is omitted.
+  # { choice='unconfined, runtime/default, localhost, "" ' } [ default="" ]
+  type: ""
+
+#DR-D1120-090
+topologySpreadConstraints: {}
+
+istio:
+  excludeOutboundPorts: "5025,8888"
+
+securityPolicy:
+  rolename: "" # By DR-D1123-134 can be set as "restricted"

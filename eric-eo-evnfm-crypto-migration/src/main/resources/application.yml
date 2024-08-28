@@ -1,0 +1,52 @@
+#
+# COPYRIGHT Ericsson 2024
+#
+#
+#
+# The copyright to the computer program(s) herein is the property of
+#
+# Ericsson Inc. The programs may be used and/or copied only with written
+#
+# permission from Ericsson Inc. or in accordance with the terms and
+#
+# conditions stipulated in the agreement/contract under which the
+#
+# program(s) have been supplied.
+#
+
+spring:
+  lifecycle:
+    timeout-per-shutdown-phase: "10s"
+  main.banner-mode: "off"
+  application:
+    name: eric-eo-evnfm-crypto-migration
+  sleuth:
+    propagation-keys: "Authorization"
+  cloud:
+    vault:
+      authentication: KUBERNETES
+      kubernetes:
+        role: secret-manager_eric-eo-evnfm-crypto-sa
+      host: eric-sec-key-management
+      kv:
+        enabled: true
+
+logging:
+  #level:
+  #    root: DEBUG
+  config: ${LOGBACK_CONFIG_FILE:classpath:logback-json.xml}
+  endpoints:
+    exclude: /, /actuator/prometheus, /actuator/health
+
+kms:
+  enabled: false
+server:
+  shutdown: graceful
+  port: 8888
+  socket: localhost
+
+evnfm:
+  crypto:
+    paths:
+      keystore: ${KEYSTORE_LOCATION:./}
+      password: ${KEYSTORE_PASSWORD_LOCATION:./}

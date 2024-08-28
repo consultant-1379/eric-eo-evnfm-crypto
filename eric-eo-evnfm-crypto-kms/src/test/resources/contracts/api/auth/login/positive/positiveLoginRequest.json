@@ -1,0 +1,4 @@
+{
+  "role": "secret-crypto-role",
+  "jwt": "testTokenForContractTests"
+}

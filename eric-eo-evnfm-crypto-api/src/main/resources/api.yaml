@@ -1,0 +1,537 @@
+#
+# COPYRIGHT Ericsson 2024
+#
+#
+#
+# The copyright to the computer program(s) herein is the property of
+#
+# Ericsson Inc. The programs may be used and/or copied only with written
+#
+# permission from Ericsson Inc. or in accordance with the terms and
+#
+# conditions stipulated in the agreement/contract under which the
+#
+# program(s) have been supplied.
+#
+
+swagger: '2.0'
+info:
+  version: 1.1.1
+  title: EO EVNFM Crypto Interface
+  description: >
+    EO EVNFM Crypto Interface API guide
+basePath: /generic/v1
+tags:
+  - name: Decryption
+  - name: Encryption
+schemes:
+  - https
+consumes:
+  - application/json
+produces:
+  - application/json
+
+# Descriptions of common responses
+responses:
+  BasicOk:
+    description: >
+      OK
+
+      The request has succeeded.
+    headers:
+      Content-Type:
+        description: The MIME type of the body of the response.
+        type: string
+        maximum: 1
+        minimum: 1
+  Accepted:
+    description: >
+      Accepted
+
+      The request was accepted for processing, but the  processing has not
+      been completed. The response body shall be empty. The HTTP response
+      shall include a "Location" HTTP header that contains the URI of the
+      newly-created "VNF LCM operation occurrence" resource corresponding
+      to the operation.
+    headers:
+      Location:
+        description: The resource URI of the created VNF instance
+        type: string
+        format: url
+  AcceptedWithContent:
+    description: >
+      Accepted
+
+      The request was accepted for processing, but the processing has not
+      been completed. On success, the HTTP response shall include a
+      "Location" HTTP header that contains the URI of the newly-created
+      "VNF LCM operation occurrence" resource corresponding to the
+      operation.
+    headers:
+      Content-Type:
+        description: The MIME type of the body of the response.
+        type: string
+        maximum: 1
+        minimum: 1
+      Location:
+        description: The resource URI of the created VNF instance
+        type: string
+        format: url
+  BadRequest:
+    description: >
+      Bad Request
+      If the request is malformed or syntactically incorrect (e.g. if the request URI
+      contains incorrect query parameters or the payload body contains a syntactically
+      incorrect data structure), the API producer shall respond with this response code.
+      ---
+      If the response to a GET request which queries a container resource would be so big
+      that the performance of the API producer is adversely affected, and the API
+      producer does not support paging for the affected resource, it shall respond with this
+      response code.
+      ---
+      If there is an application error related to the client's input that
+      cannot be easily mapped to any other HTTP response code ("catch all
+      error"), the API producer shall respond with this response code.
+    headers:
+      Content-Type:
+        description: The MIME type of the body of the response.
+        type: string
+        maximum: 1
+        minimum: 1
+    schema:
+      $ref: '#/definitions/ProblemDetails'
+  BadRequestQuery:
+    description: >
+      Bad Request
+      Invalid attribute-based filtering expression.
+      The response body shall contain a ProblemDetails structure, in which the
+      "detail" attribute should convey more information about the error
+       ---
+      Invalid attribute selector. The response body shall contain a ProblemDetails
+      structure, in which the "detail" attribute should convey more information
+      about the error.
+       ---
+      Response too big. If the VNFM supports alternative 1 (error) according to
+      clause 4.7.2.1 for this resource, this error response shall follow the
+      provisions in clause 4.7.2.2
+    headers:
+      Content-Type:
+        description: The MIME type of the body of the response.
+        type: string
+        maximum: 1
+        minimum: 1
+      WWW-Authenticate:
+        description: >
+          Challenge if the corresponding HTTP request has not provided
+          authorization, or error details if the corresponding HTTP
+          request has provided an invalid authorization token.
+        type: string
+        maximum: 1
+        minimum: 0
+    schema:
+      $ref: '#/definitions/ProblemDetails'
+  Unauthorized:
+    description: >
+      Unauthorized
+      If the request contains no access token even though one is required,
+      or if the request contains an authorization token that is invalid
+      (e.g. expired or revoked), the API producer should respond with this
+      response. The details of the error shall be returned in the
+      WWW-Authenticate HTTP header, as defined in IETF RFC 6750 and IETF
+      RFC 7235. The ProblemDetails structure may be provided.
+    headers:
+      Content-Type:
+        description: The MIME type of the body of the response.
+        type: string
+        maximum: 1
+        minimum: 1
+    schema:
+      $ref: '#/definitions/ProblemDetails'
+  Forbidden:
+    description: >
+      Forbidden
+      If the API consumer is not allowed to perform a particular request
+      to a particular resource, the API producer shall respond with this
+      response code. The "ProblemDetails" structure shall be provided.  It
+      should include in the "detail" attribute information about the
+      source of the problem, and may indicate how to solve it.
+    headers:
+      Content-Type:
+        description: The MIME type of the body of the response.
+        type: string
+        maximum: 1
+        minimum: 1
+    schema:
+      $ref: '#/definitions/ProblemDetails'
+  NotFound:
+    description: >
+      Not Found
+      If the API producer did not find a current representation for the
+      resource addressed by the URI passed in the request, or is not
+      willing to disclose that one exists, it shall respond with this
+      response code.  The "ProblemDetails" structure may be provided,
+      including in the "detail" attribute information about the source of
+      the problem, e.g. a wrong resource URI variable.
+    headers:
+      Content-Type:
+        description: The MIME type of the body of the response.
+        type: string
+        maximum: 1
+        minimum: 1
+    schema:
+      $ref: '#/definitions/ProblemDetails'
+  MethodNotAllowed:
+    description: >
+      Method Not Allowed
+      If a particular HTTP method is not supported for a particular resource, the API
+      producer shall respond with this response code. The "ProblemDetails" structure may
+      be omitted.
+    headers:
+      Content-Type:
+        description: The MIME type of the body of the response.
+        type: string
+        maximum: 1
+        minimum: 1
+    schema:
+      $ref: '#/definitions/ProblemDetails'
+  NotAcceptable:
+    description: >
+      Not Acceptable
+      If the "Accept" HTTP header does not contain at least one name of a
+      content type that is acceptable to the API producer, the API
+      producer shall respond with this response code. The "ProblemDetails"
+      structure may be omitted in that case.
+    headers:
+      Content-Type:
+        description: The MIME type of the body of the response.
+        type: string
+        maximum: 1
+        minimum: 1
+    schema:
+      $ref: '#/definitions/ProblemDetails'
+  Conflict:
+    description: >
+      Conflict
+      Another request is in progress that prohibits the fulfilment of the
+      current request, or the current resource state is inconsistent with
+      the request.
+    headers:
+      Content-Type:
+        description: The MIME type of the body of the response.
+        type: string
+        maximum: 1
+        minimum: 1
+    schema:
+      $ref: '#/definitions/ProblemDetails'
+  PreconditionFailed:
+    description: >
+      Precondition Failed
+      A precondition given in an HTTP request header is not fulfilled.
+      Typically, this is due to an ETag mismatch, indicating that the
+      resource was modified by another entity. The response body should
+      contain a ProblemDetails structure, in which the "detail" attribute
+      should convey more information about the error.
+    headers:
+      Content-Type:
+        description: The MIME type of the body of the response.
+        type: string
+        maximum: 1
+        minimum: 1
+    schema:
+      $ref: '#/definitions/ProblemDetails'
+  PayloadTooLarge:
+    description: >
+      Payload Too Large
+      If the payload body of a request is larger than the amount of data the API producer is
+      willing or able to process, it shall respond with this response code, following the
+      provisions in IETF RFC 7231 [13] for the use of the "Retry-After" HTTP header and
+      for closing the connection. The "ProblemDetails" structure may be omitted.
+    headers:
+      Content-Type:
+        description: The MIME type of the body of the response.
+        type: string
+        maximum: 1
+        minimum: 1
+    schema:
+      $ref: '#/definitions/ProblemDetails'
+  URITooLong:
+    description: >
+      URI Too Long
+      If the request URI of a request is longer than the API producer is willing or able to
+      process, it shall respond with this response code. This condition can e.g. be caused
+      by passing long queries in the request URI of a GET request. The "ProblemDetails"
+      structure may be omitted
+    headers:
+      Content-Type:
+        description: The MIME type of the body of the response.
+        type: string
+        maximum: 1
+        minimum: 1
+    schema:
+      $ref: '#/definitions/ProblemDetails'
+  RequestedRangeNotSatisfiable:
+    description: >
+      Requested Range Not Satisfiable
+      This code is returned if the requested byte range in the Range HTTP
+      header is not present in the requested resource.
+    headers:
+      Content-Type:
+        description: The MIME type of the body of the response.
+        type: string
+        maximum: 1
+        minimum: 1
+    schema:
+      $ref: '#/definitions/ProblemDetails'
+  UnprocessableEntity:
+    description: >
+      Unprocessable Entity
+      If the payload body of a request contains syntactically correct data
+      (e.g. well-formed JSON) but the data cannot be processed (e.g.
+      because it fails validation against a schema), the API producer
+      shall respond with this response code. The "ProblemDetails"
+      structure shall be provided, and should include in the "detail"
+      attribute more information about the source of the problem. NOTE 2:
+      This error response code is only applicable for methods that have a
+      request body.
+    headers:
+      Content-Type:
+        description: The MIME type of the body of the response.
+        type: string
+        maximum: 1
+        minimum: 1
+    schema:
+      $ref: '#/definitions/ProblemDetails'
+  InternalServerError:
+    description: >
+      Internal Server Error
+      If there is an application error not related to the client's input
+      that cannot be easily mapped to any other HTTP response code ("catch
+      all error"), the API producer shall respond withthis response code.
+      The "ProblemDetails" structure shall be provided, and shall include
+      in the "detail" attribute more information about the source of the
+      problem.
+    headers:
+      Content-Type:
+        description: The MIME type of the body of the response.
+        type: string
+        maximum: 1
+        minimum: 1
+    schema:
+      $ref: '#/definitions/ProblemDetails'
+  ServiceUnavailable:
+    description: >
+      Service Unavailable
+      If the API producer encounters an internal overload situation of
+      itself or of a system it relies on, it should respond with this
+      response code, following the provisions in IETF RFC 7231 [13] for
+      the use of the "Retry-After" HTTP header and for the alternative to
+      refuse the connection. The "ProblemDetails" structure may be
+      omitted.
+    headers:
+      Content-Type:
+        description: The MIME type of the body of the response.
+        type: string
+        maximum: 1
+        minimum: 1
+    schema:
+      $ref: '#/definitions/ProblemDetails'
+definitions:
+  ProblemDetails:
+    description: >
+      The definition of the general "ProblemDetails" data structure from
+      IETF RFC 7807 [19] is reproduced in this structure. Compared to
+      the general framework defined in IETF RFC 7807 [19], the "status"
+      and "detail" attributes are mandated to be included by the present
+      document, to ensure that the response contains additional textual
+      information about an error. IETF RFC 7807 [19] foresees
+      extensibility of the "ProblemDetails" type. It is possible that
+      particular APIs in the present document, or particular
+      implementations, define extensions to define additional attributes
+      that provide more information about the error. The description
+      column only provides some explanation of the meaning to Facilitate
+      understanding of the design. For a full description, see IETF RFC
+      7807 [19].
+    type: object
+    required:
+      - status
+      - detail
+    properties:
+      type:
+        description: >
+          A URI reference according to IETF RFC 3986 [5] that identifies
+          the problem type. It is encouraged that the URI provides
+          human-readable documentation for the problem (e.g. using HTML)
+          when dereferenced. When this member is not present, its value
+          is assumed to be "about:blank".
+        type: string
+        format: URI
+      title:
+        description: >
+          A short, human-readable summary of the problem type. It should
+          not change from occurrence to occurrence of the problem,
+          except for purposes of localization. If type is given and
+          other than "about:blank", this attribute shall also be
+          provided. A short, human-readable summary of the problem
+          type.  It SHOULD NOT change from occurrence to occurrence of
+          the problem, except for purposes of localization (e.g., using
+          proactive content negotiation; see [RFC7231], Section 3.4).
+        type: string
+      status:
+        description: >
+          The HTTP status code for this occurrence of the problem. The
+          HTTP status code ([RFC7231], Section 6) generated by the
+          origin server for this occurrence of the problem.
+        type: integer
+      detail:
+        description: >
+          A human-readable explanation specific to this occurrence of
+          the problem.
+        type: string
+      instance:
+        description: >
+          A URI reference that identifies the specific occurrence of the
+          problem. It may yield further information if dereferenced.
+        type: string
+        format: URI
+  EncryptionResponse:
+    description: |
+      Object which contains encrypted data.
+    type: object
+    required:
+      - ciphertext
+    properties:
+      ciphertext:
+        description: |
+          Encrypted data.
+        type: string
+  DecryptionResponse:
+    description: |
+      Object which contains decrypted data.
+    type: object
+    required:
+      - plaintext
+    properties:
+      plaintext:
+        description: |
+          Decrypted data.
+        type: string
+  URILink:
+    description: |
+      This type represents a link to a resource.
+    type: object
+    required:
+      - href
+    properties:
+      href:
+        description: |
+          URI of the referenced resource.
+        type: string
+        format: url
+
+paths:
+  /encryption:
+    post:
+      description: >
+        Encrypt sensitive data
+        The POST method encrypts sensitive data.
+      tags:
+        - Encryption
+      parameters:
+        - name: EncryptionRequest
+          description: Parameters for encryption.
+          in: body
+          required: true
+          schema:
+            type: object
+            required:
+              - plaintext
+            properties:
+              plaintext:
+                description: Data to be encrypted
+                type: string
+        - name: Accept
+          description: >
+            Content-Types that are acceptable for the response. Reference: IETF
+            RFC 7231
+          in: header
+          required: true
+          type: string
+        - name: Content-Type
+          description: |
+            The MIME type of the body of the request. Reference: IETF RFC 7231
+          in: header
+          required: true
+          type: string
+      responses:
+        '200':
+          description: Sensitive data was encrypted successfully
+          headers:
+            Content-Type:
+              description: The MIME type of the body of the response.
+              type: string
+              maximum: 1
+              minimum: 1
+          schema:
+            $ref: '#/definitions/EncryptionResponse'
+        '500':
+          $ref: '#/responses/InternalServerError'
+        '503':
+          $ref: '#/responses/ServiceUnavailable'
+  /decryption:
+    post:
+      description: >
+        Decrypt sensitive data
+        The POST method decrypts sensitive data.
+      tags:
+        - Decryption
+      parameters:
+        - name: DecryptionRequest
+          description: Parameters for decryption.
+          in: body
+          required: true
+          schema:
+            type: object
+            required:
+              - ciphertext
+            properties:
+              ciphertext:
+                description: Ciphertext to be decrypted
+                type: string
+        - name: Accept
+          description: >
+            Content-Types that are acceptable for the response. Reference: IETF
+            RFC 7231
+          in: header
+          required: true
+          type: string
+        - name: Content-Type
+          description: |
+            The MIME type of the body of the request. Reference: IETF RFC 7231
+          in: header
+          required: true
+          type: string
+      responses:
+        '200':
+          description: Sensitive data was decrypted successfully
+          headers:
+            Content-Type:
+              description: The MIME type of the body of the response.
+              type: string
+              maximum: 1
+              minimum: 1
+          schema:
+            $ref: '#/definitions/DecryptionResponse'
+        '422':
+          description: Decrypted data is malformed
+          headers:
+            Content-Type:
+              description: The MIME type of the body of the response.
+              type: string
+              maximum: 1
+              minimum: 1
+          schema:
+            $ref: '#/definitions/ProblemDetails'
+        '500':
+          $ref: '#/responses/InternalServerError'
+        '503':
+          $ref: '#/responses/ServiceUnavailable'

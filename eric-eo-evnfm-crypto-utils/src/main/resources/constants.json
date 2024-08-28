@@ -1,0 +1,11 @@
+{
+  "keystoreType": "KMS",
+  "encryptionAlgorithm": "AES",
+  "transformation": "AES/CBC/PKCS5Padding",
+  "digestAlgorithm": "SHA-256",
+  "secureRandomAlgorithm": "SHA1PRNG",
+  "cipherKeyIdLength": 16,
+  "cipherKeyLength": 128,
+  "ivLength": 16,
+  "latestEncryptionDecryptionVersion": 1
+}

@@ -1,0 +1,22 @@
+{
+  "keystoreType": "JCEKS",
+  "keystoreFile": "vnfm.jks",
+  "passwordsFile": "seed",
+  "keystorePasswordAlias": "09657981-8771-4ab0-897a-729ac50b01c1",
+  "encryptionAlgorithm": "AES",
+  "transformation": "AES/CBC/PKCS5Padding",
+  "digestAlgorithm": "SHA-256",
+  "secureRandomAlgorithm": "SHA1PRNG",
+  "passwordLength": 14,
+  "cipherKeyIdLength": 16,
+  "cipherKeyLength": 128,
+  "ivLength": 16,
+  "passwordsEncryptionAlgorithm": "AES",
+  "passwordsTransformation": "AES/CBC/PKCS5Padding",
+  "passwordsFileEncryptionKey": "o1DW2nbI7dBRVH+uH8MBYQ==",
+  "passwordsFileEncryptionIv": "rJYldc+LG9JujrUq1/ZoDQ==",
+  "passwordsFileHeaderLength": 6,
+  "passwordsFileSignature": -529235669,
+  "latestEncryptionDecryptionVersion": 1,
+  "latestPasswordsObscurityVersion": 258
+}

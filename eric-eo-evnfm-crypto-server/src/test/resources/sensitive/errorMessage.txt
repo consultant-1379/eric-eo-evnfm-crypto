@@ -1,0 +1,11 @@
+Unrecognized field "keystoreType2" (class com.ericsson.eo.evnfm.crypto.presentation.model.SecurityConfig), not marked as ignorable (20 known properties: "passwordLength", "passwordsFileEncryptionIv", "passwordsFileHeaderLength", "passwordsFileEncryptionKey", "transformation", "digestAlgorithm", "encryptionAlgorithm", "keystorePasswordAlias", "passwordsFile", "secureRandomAlgorithm", "cipherKeyLength", "latestPasswordsObscurityVersion", "keystoreType", "keystoreFile", "passwordsTransformation", "passwordsFileSignature", "ivLength", "cipherKeyIdLength", "passwordsEncryptionAlgorithm", "latestEncryptionDecryptionVersion"])
+ at [Source: (String)"{
+  "keystoreType2": "KMS",
+  "encryptionAlgorithm": "AES",
+  "transformation": "AES/CBC/PKCS5Padding",
+  "digestAlgorithm": "SHA-256",
+  "secureRandomAlgorithm": "SHA1PRNG",
+  "cipherKeyIdLength": 16,
+  "cipherKeyLength": 128,
+  "ivLength": 16,
+  "latestEncryptionDecryptionVersion": 1

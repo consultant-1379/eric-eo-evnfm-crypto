@@ -1,0 +1,34 @@
+#
+# COPYRIGHT Ericsson 2024
+#
+#
+#
+# The copyright to the computer program(s) herein is the property of
+#
+# Ericsson Inc. The programs may be used and/or copied only with written
+#
+# permission from Ericsson Inc. or in accordance with the terms and
+#
+# conditions stipulated in the agreement/contract under which the
+#
+# program(s) have been supplied.
+#
+
+global:
+  registry:
+    url: armdocker.rnd.ericsson.se
+    imagePullPolicy: IfNotPresent
+  timezone: UTC
+  hosts:
+    vnfm: vnfm.ericsson.example.com
+  nodeSelector: {}
+  labels: {}
+  annotations: {}
+  # internalIPFamily: IPv6 or IPv4
+  security:
+    privilegedPolicyClusterRoleName: RELEASE-NAME-allowed-use-privileged-policy
+    tls:
+      trustedInternalRootCa:
+        secret: eric-sec-sip-tls-trusted-root-cert
+  securityPolicy:
+    rolekind: ClusterRole # DR-D1123-134 { choice='Role, ClusterRole, ""'' } [ default="" ]

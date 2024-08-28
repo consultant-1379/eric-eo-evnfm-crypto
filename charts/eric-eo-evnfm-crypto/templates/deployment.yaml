@@ -1,0 +1,569 @@
+#
+# COPYRIGHT Ericsson 2024
+#
+#
+#
+# The copyright to the computer program(s) herein is the property of
+#
+# Ericsson Inc. The programs may be used and/or copied only with written
+#
+# permission from Ericsson Inc. or in accordance with the terms and
+#
+# conditions stipulated in the agreement/contract under which the
+#
+# program(s) have been supplied.
+#
+
+{{/*
+Values for probes
+*/}}
+{{- $probesValue := fromJson (include "eric-eo-evnfm-crypto.probes" .) -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "eric-eo-evnfm-crypto.name" . }}
+  labels: {{- include "eric-eo-evnfm-crypto.labels.extended-defaults" . | nindent 4 }}
+  annotations: {{- include "eric-eo-evnfm-crypto.annotations" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  strategy:
+    type: {{ .Values.updateStrategy.type | quote }}
+  {{- if and (eq .Values.updateStrategy.type "RollingUpdate") .Values.updateStrategy.rollingUpdate }}
+    rollingUpdate:
+      maxUnavailable: {{ .Values.updateStrategy.rollingUpdate.maxUnavailable }}
+      maxSurge: {{ .Values.updateStrategy.rollingUpdate.maxSurge }}
+  {{- end }}
+  selector:
+    matchLabels:
+      app: {{ template "eric-eo-evnfm-crypto.name" . }}
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        {{- $commonLabels := include "eric-eo-evnfm-crypto.labels.extended-defaults" . | fromYaml }}
+        {{- include "eric-eo-evnfm-library-chart.mergeLabels" (dict "location" .Template.Name "sources" (list
+            $commonLabels)) | trim | nindent 8 }}
+      annotations:
+        {{- $commonAnnotations := include "eric-eo-evnfm-crypto.annotations" . | fromYaml }}
+        {{- $serviceMesh := include "eric-eo-evnfm-crypto.service-mesh-inject" . | fromYaml }}
+        {{- $serviceMeshVersion := include "eric-eo-evnfm-crypto.service-mesh-version" . | fromYaml }}
+        {{- $serviceMeshLogs := include "eric-eo-evnfm-crypto.service-mesh-logs" . | fromYaml }}
+        {{- $serviceMeshExcludeOutboundPort := include "eric-eo-evnfm-crypto.excludeOutboundPorts" . | fromYaml }}
+        {{- include "eric-eo-evnfm-library-chart.mergeAnnotations" (dict "location" .Template.Name "sources" (list $commonAnnotations
+            $serviceMesh $serviceMeshVersion $serviceMeshLogs $serviceMeshExcludeOutboundPort)) | trim | nindent 8 }}
+    spec:
+      securityContext:
+        fsGroup: {{ include "eric-eo-evnfm-crypto.fsGroup" . }}
+      affinity:
+        podAntiAffinity:
+      {{- if eq .Values.affinity.podAntiAffinity "hard" }}
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+      {{- else if eq .Values.affinity.podAntiAffinity "soft" }}
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+      {{- end }}
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - {{ template "eric-eo-evnfm-crypto.name" . }}
+              topologyKey: {{ .Values.affinity.topologyKey }}
+      {{- if include "eric-eo-evnfm-crypto.pullSecrets" . }}
+      imagePullSecrets:
+        - name: {{ template "eric-eo-evnfm-crypto.pullSecrets" . }}
+      {{- end }}
+      serviceAccountName: {{ template "eric-eo-evnfm-crypto.serviceAccount.name" . }}
+      {{- if include "eric-eo-evnfm-crypto.podPriority" . }}
+      priorityClassName: {{- include "eric-eo-evnfm-crypto.podPriority" . | indent 2 }}
+      {{- end }}
+      initContainers:
+        - name: ca-setup
+          image: {{ template "eric-eo-evnfm-crypto.mainImagePath" . }}
+          imagePullPolicy: {{ template "eric-eo-evnfm-crypto.sles.imagePullPolicy" . }}
+          env:
+            - name: "SOURCE"
+              value: "/var/lib/ca-certificates"
+            - name: "TARGET"
+              value: "/ca"
+          command:
+            - "/bin/sh"
+            - "-c"
+            - "cp -R $SOURCE/* $TARGET/ && chmod 0755 -R $TARGET/*"
+          resources:
+            requests:
+            {{- if .Values.resources.caSetup.requests.cpu }}
+              cpu: {{ .Values.resources.caSetup.requests.cpu | quote }}
+            {{- end }}
+            {{- if .Values.resources.caSetup.requests.memory }}
+              memory: {{ .Values.resources.caSetup.requests.memory | quote }}
+            {{- end }}
+            {{- if index .Values.resources.caSetup.requests "ephemeral-storage" }}
+              ephemeral-storage: {{ index .Values.resources.caSetup.requests "ephemeral-storage" | quote }}
+            {{- end }}
+            limits:
+            {{- if .Values.resources.caSetup.limits.cpu }}
+              cpu: {{ .Values.resources.caSetup.limits.cpu | quote }}
+            {{- end }}
+            {{- if .Values.resources.caSetup.limits.memory }}
+              memory: {{ .Values.resources.caSetup.limits.memory | quote }}
+            {{- end }}
+            {{- if index .Values.resources.caSetup.limits "ephemeral-storage" }}
+              ephemeral-storage: {{ index .Values.resources.caSetup.limits "ephemeral-storage" | quote }}
+            {{- end }}
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            privileged: false
+            runAsNonRoot: true
+            capabilities:
+              drop:
+                - all
+          volumeMounts:
+            - mountPath: /ca
+              name: ca-data
+              readOnly: false
+{{- if .Values.kms.enabled }}
+        - name: kms-setup
+          image: {{ template "eric-eo-evnfm-crypto.mainImagePath" . }}
+          imagePullPolicy: {{ template "eric-eo-evnfm-crypto.sles.imagePullPolicy" . }}
+          env:
+            # name of Crypto's service account
+            - name: SERVICE_ACCOUNT_NAME
+              value: {{ template "eric-eo-evnfm-crypto.serviceAccount.name" . }}
+              # Default mount point containing CA certificate file for TLS
+              # communication to KMS
+            - name: KMS_CACERT_FILE
+              value: {{ template "eric-eo-evnfm-crypto.kmsCaCertFile" . }}
+            # name of policy we want to create in KMS
+            - name: KMS_READ_WRITE_POLICY_NAME
+              value: {{ .Values.kms.credentials.policyName }}
+            # Path within KMS where we're storing credentials
+            - name: KMS_STORAGE_PATH_V1
+              value: {{ .Values.kms.credentials.storagePathV1 }}
+            - name: KMS_STORAGE_PATH_V2
+              value: {{ .Values.kms.credentials.storagePathV2 }}
+            # name of role we want to associate - prefix only, we'll tack SERVICE_ACCOUNT_NAME onto it to ensure role uniqueness
+            - name: KMS_MANAGER_ROLE_PREFIX
+              value: {{ .Values.kms.credentials.rolePrefix }}
+          command: [ "bash", "-c" ]
+          args:
+            - |
+              # Prints a line across the width of the terminal to split up script output and help make it more readable
+              # Colour can be changed by argument to yellow ("warn") or red ("error")
+              function separator() {
+                  if [[ $1 ]]; then
+                    case "$1" in
+                    WARN|warn)
+                    COLOUR="\e[33m"
+                    ;;
+                    ERROR|error)
+                    COLOUR="\e[31m"
+                    ;;
+                    esac
+                  else
+                    COLOUR="\e[37m"
+                  fi
+                  echo -e "\n$COLOUR$(head -c "$(tput -T xterm cols)" < /dev/zero | sed 's/./─/g')\e[0m"
+              }
+
+              # Logs a message to the console, formatted with useful information such as:
+              #   date/time stamp
+              #   level (passed by argument: INFO (default), WARN, ERROR, or DEBUG)
+              #   script line number
+              #   user, controlled by LOG_USERNAME variable if set
+              # Multi-line messages will be split into individual log lines
+              function log() {
+                LEVEL="\e[34mINFO\e[0m"
+
+                case "$1" in
+                  DEBUG|debug)
+                  if [[ $DEBUG_OUTPUT ]]; then
+                    LEVEL="\e[36mDEBUG\e[0m"
+                    shift
+                  else
+                    return
+                  fi
+                  ;;
+                  WARN|warn)
+                  LEVEL="\e[33mWARN\e[0m"
+                  shift
+                  ;;
+                  ERROR|error)
+                  LEVEL="\e[31mERROR\e[0m"
+                  shift
+                  ;;
+                esac
+
+                LINE_PORTION=$(
+                  if [[ -n $LINE_NUMBER ]]; then
+                    echo " - {line: $LINE_NUMBER}"
+                  else
+                    echo " - {line: ${BASH_LINENO[0]}}"
+                  fi
+                )
+
+                if [[ -n $LOG_USERNAME ]]; then
+                  LOG_USERNAME_PORTION=" - (User: $LOG_USERNAME)"
+                else
+                  unset LOG_USERNAME_PORTION
+                fi
+
+
+                if [[ "$*" = *$'\n'* ]]; then
+                  echo "$*" | while read -r individual_line; do
+                    LINE_NUMBER=${BASH_LINENO[0]} log $(echo $LEVEL | sed 's/.*m\(.*\)\\e.*/\1/') "$individual_line"
+                  done
+                  return
+                fi
+
+                LOGGED_STRING=" - $*"
+
+                echo -e "$(date -Ins | sed 's/,\(...\).*\(\+.*\)/.\1\2/' | tr 'T' ' ') - [$LEVEL]$LINE_PORTION$LOG_USERNAME_PORTION$LOGGED_STRING"
+                unset LOGGED_STRING
+              }
+
+              # Aliases cURL with some default arguments useful when calling KMS REST API
+              function curlKms(){
+                curl --include -L --silent --cacert "$KMS_CACERT_FILE" "$@"
+              }
+
+              SLEEP_TIMEOUT=30
+              separator
+              log "Sleep for $SLEEP_TIMEOUT seconds"
+              sleep $SLEEP_TIMEOUT
+              log "Starting job execution"
+
+              # Namespace of Kubernetes service account to grant KMS capabilities
+              # service account name already assigned to SERVICE_ACCOUNT_NAME environment variable
+              MOUNTED_SERVICE_ACCOUNT_SECRET='/run/secrets/kubernetes.io/serviceaccount'
+              SERVICE_ACCOUNT_NAMESPACE=$(< "$MOUNTED_SERVICE_ACCOUNT_SECRET"/namespace) || {
+                separator error
+                log error "Error reading service account namespace in from $MOUNTED_SERVICE_ACCOUNT_SECRET/namespace."
+                exit 1
+              }
+
+              #################################################################################
+              #
+              # Script logic to set up eric-oss-key-management-agent's read/write access to KMS
+              #
+              # Uses mounted KMS admin secret to:
+              #   - gain admin access to KMS
+              #   - create a KMS policy granting read/write access to our chosen credential path
+              #   - create a KMS role assigning eric-oss-key-management-agent's service account
+              #     (by name and namespace) to that policy
+              #
+              #################################################################################
+
+              # Log in to KMS with the eric-sec-key-management-admin account and retrieve
+              # a service-credentials token
+              separator
+              CREDENTIALS_ROLE='service-credentials'
+              ADMIN_ACCOUNT='eric-sec-key-management-admin'
+              log "Logging in to KMS with role \"$CREDENTIALS_ROLE\" and service account \"$ADMIN_ACCOUNT\""
+
+              KMS_LOGIN_DATA='{"role":"'"$CREDENTIALS_ROLE"'", "jwt":"'"$(cat /run/secrets/$ADMIN_ACCOUNT/token)"'"}'
+              KMS_LOGIN_RESPONSE=$(\
+                curlKms --request POST \
+                  'https://eric-sec-key-management:8200/v1/auth/kubernetes/login' \
+                  --data "$KMS_LOGIN_DATA" \
+              ) || {
+                separator error
+                log error 'Error encountered logging in to KMS (eric-sec-key-management):'
+                log error "$KMS_LOGIN_RESPONSE"
+                exit 1
+              }
+              LOGIN_STATUS=$(echo "$KMS_LOGIN_RESPONSE" | grep "HTTP/")
+              log "KMS_LOGIN response status $LOGIN_STATUS"
+              [[ $LOGIN_STATUS = *"200"* ]] || {
+                separator error
+                log error "KMS login failed - response was:"
+                log error "$KMS_LOGIN_RESPONSE"
+                exit 1
+              }
+
+              KMS_CREDENTIAL_TOKEN_ADMIN="$(\
+                echo "$KMS_LOGIN_RESPONSE" \
+                | grep -e '^{' | tr ',' '\n' \
+                | sed -n 's/.*"client_token":"\(.*\)"/\1/p'\
+              )"
+              LOG_USERNAME="$CREDENTIALS_ROLE"
+              log "KMS login successful - retrieved KMS client_token for role \"$CREDENTIALS_ROLE\""
+
+              # Get the unlimited admin token stored by ADP at
+              # service-credentials/eric-sec-key-management-admin/credentials
+              separator
+              log "Retrieving unlimited admin token"
+              KMS_GET_RESPONSE=$(\
+                curlKms --header "X-Vault-Token: $KMS_CREDENTIAL_TOKEN_ADMIN" --request GET \
+                'https://eric-sec-key-management:8200/v1/secret-v2/data/service-credentials/eric-sec-key-management-admin/credentials' \
+              ) || {
+                separator error
+                log error 'Error encountered retrieving admin token from KMS (eric-sec-key-management)'
+                log error "$KMS_LOGIN_RESPONSE"
+                exit 1
+              }
+              GET_STATUS=$(echo "$KMS_GET_RESPONSE" | grep "HTTP/")
+              log "KMS_GET admin token response status $GET_STATUS"
+              [[ $GET_STATUS = *"200"* ]] || {
+                separator error
+                log error "Token retrieval failed - response was:"
+                log error "$KMS_GET_RESPONSE"
+                exit 1
+              }
+
+              KMS_ADMIN_TOKEN="$(\
+                echo "$KMS_GET_RESPONSE" \
+                | grep -e '^{' \
+                | tr ',' '\n' \
+                | sed -n 's/"data":{"data":{"token":"\(.*\)"}/\1/p'\
+              )"
+              LOG_USERNAME="root"
+              log "Successfully retrieved KMS admin client_token"
+
+              # Create KMS policy to grant read/write access to our chosen KMS path
+              separator
+              log "Creating KMS policy to grant read/write access to KMS path \"$KMS_STORAGE_PATH_V1\""
+
+              KMS_CREATE_POLICY_DATA='{"policy": "path \"'"$KMS_STORAGE_PATH_V1"'\" { capabilities = [\"create\", \"read\", \"update\", \"delete\", \"list\"]}"}'
+              log "KMS_CREATE_POLICY request data: $KMS_CREATE_POLICY_DATA"
+
+              KMS_CREATE_POLICY_RESPONSE=$(\
+                curlKms --header "X-Vault-Token: $KMS_ADMIN_TOKEN" --request POST \
+                'https://eric-sec-key-management:8200/v1/sys/policy/'"$KMS_READ_WRITE_POLICY_NAME" \
+                --data "$KMS_CREATE_POLICY_DATA" \
+              ) || {
+                separator error
+                log error 'Error encountered creating read/write policy in KMS (eric-sec-key-management):'
+                log error "$KMS_CREATE_POLICY_RESPONSE"
+                exit 1
+              }
+              CREATE_POLICY_STATUS=$(echo "$KMS_CREATE_POLICY_RESPONSE" | grep "HTTP/")
+              log "KMS_CREATE_POLICY response status $CREATE_POLICY_STATUS"
+              [[ $CREATE_POLICY_STATUS = *"204"* ]] || {
+                separator error
+                log error "Failed to create read/write KMS policy - response was:"
+                log error "$KMS_CREATE_POLICY_RESPONSE"
+                exit 1
+              }
+              log "Policy \"$KMS_READ_WRITE_POLICY_NAME\" created successfully"
+
+              # Create KMS role to bind the read/write policy to our mounted service account
+              separator
+              log "Creating KMS role to bind read/write policy \"$KMS_READ_WRITE_POLICY_NAME\" to service account \"$SERVICE_ACCOUNT_NAME\" in namespace \"$SERVICE_ACCOUNT_NAMESPACE\""
+
+              # Have to create unique role per service account - no way to update roles.
+              # Alternative is a lot of getting and parsing to check if the role already exists
+              #   and merge our service account details into the values,
+              #   so not going to those lengths
+
+              KMS_MANAGER_ROLE_DATA='{"bound_service_account_names": "'"$SERVICE_ACCOUNT_NAME"'", "bound_service_account_namespaces": "'"$SERVICE_ACCOUNT_NAMESPACE"'", "policies": ["'"$KMS_READ_WRITE_POLICY_NAME"'"], "max_ttl": 1800000}'
+              log "KMS_MANAGER_ROLE request data: $KMS_MANAGER_ROLE_DATA"
+
+              KMS_MANAGER_ROLE_NAME="$KMS_MANAGER_ROLE_PREFIX"'_'"$SERVICE_ACCOUNT_NAME"
+              log "Creating role \"$KMS_MANAGER_ROLE_NAME\""
+              KMS_CREATE_ROLE_RESPONSE=$(\
+                curlKms --header "X-Vault-Token: $KMS_ADMIN_TOKEN" --request POST \
+                  'https://eric-sec-key-management:8200/v1/auth/kubernetes/role/'"$KMS_MANAGER_ROLE_NAME" \
+                  --data "$KMS_MANAGER_ROLE_DATA" \
+              ) || {
+                separator error
+                log error 'Error encountered creating manager role for $SERVICE_ACCOUNT_NAME in KMS (eric-sec-key-management)'
+                log error "$KMS_CREATE_ROLE_RESPONSE"
+                exit 1
+              }
+              CREATE_ROLE_STATUS=$(echo "$KMS_CREATE_ROLE_RESPONSE" | grep "HTTP/")
+              log "KMS_CREATE_ROLE response status $CREATE_ROLE_STATUS"
+              [[ $CREATE_ROLE_STATUS = *"204"* ]] || {
+                separator error
+                log error "Failed to create KMS manager role for $SERVICE_ACCOUNT_NAME - response was:"
+                log error "$KMS_CREATE_ROLE_RESPONSE"
+                exit 1
+              }
+              log "Role \"$KMS_MANAGER_ROLE_NAME\" created successfully"
+
+              echo
+
+              SUCCESS_MESSAGE=" SUCCESS "
+              TERMINAL_WIDTH=$(tput -T xterm cols)
+              STAR_COUNT=$(((TERMINAL_WIDTH - ${#SUCCESS_MESSAGE}) / 2))
+              STAR_SEGMENT="$(head -c "$STAR_COUNT" < /dev/zero | tr "\0" "*")"
+              STAR_LINE="\e[32m$STAR_SEGMENT$SUCCESS_MESSAGE$STAR_SEGMENT\e[0m"
+              echo -e "$STAR_LINE"
+              log "Service account $SERVICE_ACCOUNT_NAME has been granted $KMS_READ_WRITE_POLICY_NAME access in KMS"
+              echo -e "$STAR_LINE"
+          resources:
+            requests:
+            {{- if .Values.resources.kmsSetup.requests.cpu }}
+              cpu: {{ .Values.resources.kmsSetup.requests.cpu | quote }}
+            {{- end }}
+            {{- if .Values.resources.kmsSetup.requests.memory }}
+              memory: {{ .Values.resources.kmsSetup.requests.memory | quote }}
+            {{- end }}
+            {{- if index .Values.resources.kmsSetup.requests "ephemeral-storage" }}
+              ephemeral-storage: {{ index .Values.resources.kmsSetup.requests "ephemeral-storage" | quote }}
+            {{- end }}
+            limits:
+            {{- if .Values.resources.kmsSetup.limits.cpu }}
+              cpu: {{ .Values.resources.kmsSetup.limits.cpu | quote }}
+            {{- end }}
+            {{- if .Values.resources.kmsSetup.limits.memory }}
+              memory: {{ .Values.resources.kmsSetup.limits.memory | quote }}
+            {{- end }}
+            {{- if index .Values.resources.kmsSetup.limits "ephemeral-storage" }}
+              ephemeral-storage: {{ index .Values.resources.kmsSetup.limits "ephemeral-storage" | quote }}
+            {{- end }}
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            privileged: false
+            runAsNonRoot: true
+            capabilities:
+              drop:
+                - all
+          volumeMounts:
+            - name: kms-ca-cert
+              mountPath: /run/secrets/kms-ca-cert
+            - name: eric-sec-key-management-admin
+              mountPath: /run/secrets/eric-sec-key-management-admin
+{{- end }}
+      containers:
+        - name: {{ .Chart.Name }}
+          image: {{ template "eric-eo-evnfm-crypto.mainImagePath" . }}
+          imagePullPolicy: {{ template "eric-eo-evnfm-crypto.imagePullPolicy" . }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.container.ports.http }}
+              protocol: TCP
+          env:
+            - name: TZ
+              value: {{ .Values.global.timezone }}
+            - name: SERVICE_ID
+              value: "eric-eo-evnfm-crypto"
+            - name: "SPRING_PROFILES_ACTIVE"
+              value: "prod"
+            - name: "KUBERNETES_MASTER"
+              value: {{ .Values.kubernetes.master }}
+            - name: "retry.maxAttempts"
+              value: {{ .Values.retry.maxAttempts | quote }}
+            - name: "retry.backoff"
+              value: {{ .Values.retry.backoff | quote }}
+            - name: "spring.codec.maxInMemorySize"
+              value: {{ .Values.maxInMemorySize }}
+        {{- if .Values.global.logging }}
+          {{- if .Values.global.logging.enabled }}
+            - name: LOG_STREAMINGMETHOD
+              value: {{ include "eric-eo-evnfm-crypto.log.streamingMethod" . }}
+            {{- if or (eq (include "eric-eo-evnfm-crypto.log.streamingMethod" .) "dual") (eq (include "eric-eo-evnfm-crypto.log.streamingMethod" .) "direct") }}
+            - name: LOGSTASH_HOST
+              value: "{{ .Values.logging.logstash.host }}"
+            - name: LOGSTASH_PORT
+              value: "{{ .Values.logging.logstash.port }}"
+            {{- end }}
+          {{- end }}
+        {{- end }}
+            - name: "kms.enabled"
+              value: {{ .Values.kms.enabled | quote }}
+          securityContext:
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - all
+            allowPrivilegeEscalation: false
+            privileged: false
+            runAsNonRoot: true
+            runAsGroup: 144294
+          volumeMounts:
+            - name: tmp-data
+              mountPath: /tmp
+              readOnly: false
+            - mountPath: /run/secrets/kms-ca-cert
+              name: kms-ca-cert
+              readOnly: false
+            - mountPath: /var/lib/ca-certificates
+              name: ca-data
+              readOnly: false
+            - mountPath: {{ .Values.kms.tokenPath }}
+              name: {{ .Values.kms.tokenName }}
+          resources:
+            requests:
+            {{- if .Values.resources.cryptoService.requests.cpu }}
+              cpu: {{ .Values.resources.cryptoService.requests.cpu | quote }}
+            {{- end }}
+            {{- if .Values.resources.cryptoService.requests.memory }}
+              memory: {{ .Values.resources.cryptoService.requests.memory | quote }}
+            {{- end }}
+            {{- if index .Values.resources.cryptoService.requests "ephemeral-storage" }}
+              ephemeral-storage: {{ index .Values.resources.cryptoService.requests "ephemeral-storage" | quote }}
+            {{- end }}
+            limits:
+            {{- if .Values.resources.cryptoService.limits.cpu }}
+              cpu: {{ .Values.resources.cryptoService.limits.cpu | quote }}
+            {{- end }}
+            {{- if .Values.resources.cryptoService.limits.memory }}
+              memory: {{ .Values.resources.cryptoService.limits.memory | quote }}
+            {{- end }}
+            {{- if index .Values.resources.cryptoService.limits "ephemeral-storage" }}
+              ephemeral-storage: {{ index .Values.resources.cryptoService.limits "ephemeral-storage" | quote }}
+            {{- end }}
+          livenessProbe:
+            exec:
+              command:
+               - curl
+               - localhost:{{ .Values.container.ports.http }}/actuator/health/liveness
+            initialDelaySeconds: {{ $probesValue.cryptoService.livenessProbe.initialDelaySeconds }}
+            timeoutSeconds: {{ $probesValue.cryptoService.livenessProbe.timeoutSeconds }}
+            periodSeconds: {{ $probesValue.cryptoService.livenessProbe.periodSeconds }}
+            failureThreshold: {{ $probesValue.cryptoService.livenessProbe.failureThreshold }}
+          readinessProbe:
+            exec:
+             command:
+              - curl
+              - localhost:{{ .Values.container.ports.http }}/actuator/health/readiness
+            initialDelaySeconds: {{ $probesValue.cryptoService.readinessProbe.initialDelaySeconds }}
+            timeoutSeconds: {{ $probesValue.cryptoService.readinessProbe.timeoutSeconds }}
+            periodSeconds: {{ $probesValue.cryptoService.readinessProbe.periodSeconds }}
+            failureThreshold: {{ $probesValue.cryptoService.readinessProbe.failureThreshold }}
+      volumes:
+        - name: tmp-data
+          emptyDir: {}
+        - name: kms-ca-cert
+          secret:
+            optional: true
+            secretName: {{ template "eric-eo-evnfm-crypto.trustedInternalRootCa" . }}
+        - name: ca-data
+          emptyDir: { }
+        - name: eric-sec-key-management-admin
+          secret:
+            optional: false
+            secretName: eric-sec-key-management-admin
+        - name: {{ .Values.kms.tokenName }}
+          projected:
+            sources:
+              - serviceAccountToken:
+                  path: token
+                  expirationSeconds: 3600
+                  audience: eric-sec-key-management
+      {{- if or .Values.nodeSelector (and .Values.global .Values.global.nodeSelector) }}
+      nodeSelector: {{- include "eric-eo-evnfm-crypto.nodeSelector" . | nindent 8 }}
+      {{- end }}
+      {{- if or .Values.tolerations (and .Values.global .Values.global.tolerations) }}
+      tolerations: {{- include "eric-eo-evnfm-crypto.tolerations.cryptoService" . | nindent 8 }}
+      {{- end }}
+      {{- if .Values.terminationGracePeriodSeconds }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds.cryptoService | int }}
+      {{- end }}
+      {{- if .Values.topologySpreadConstraints }}
+      topologySpreadConstraints:
+      {{- range $constraints := .Values.topologySpreadConstraints }}
+      - maxSkew: {{ $constraints.maxSkew }}
+        topologyKey: {{ $constraints.topologyKey }}
+        whenUnsatisfiable: {{ $constraints.whenUnsatisfiable }}
+        labelSelector:
+          matchLabels:
+            app.kubernetes.io/name: {{ template "eric-eo-evnfm-crypto.name" . }}
+            app.kubernetes.io/instance: {{ .Release.Name | quote }}
+      {{- end }}
+      {{- end }}
